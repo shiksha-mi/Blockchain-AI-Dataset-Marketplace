@@ -255,14 +255,19 @@ function App() {
   }
 
   const purchaseDataset = async (id, priceInWei) => {
+    console.log("Purchase clicked:", id, priceInWei.toString())
     try {
       if (!contract) {
         setMessage('Please connect MetaMask first.')
         return
       }
       setMessage('Please confirm the purchase in MetaMask...')
+
       const tx = await contract.purchaseDataset(id, { value: priceInWei })
+      console.log("Purchase transaction sent:", tx.hash)
+      
       await tx.wait()
+      console.log("Purchase transaction confirmed")
       setMessage('Dataset purchased successfully!')
     } catch (error) {
       console.error('Purchase error:', error)
