@@ -319,7 +319,16 @@ const purchaseDataset = async (id, priceInWei) => {
 
   return (
     <div className="app">
-      <h1>Blockchain AI Dataset Marketplace</h1>
+<header className="dashboard-welcome">
+  <div>
+    <p className="welcome-label">YOUR DATA MARKETPLACE</p>
+    <h1>Blockchain AI Dataset Marketplace</h1>
+    <p className="welcome-description">
+      Discover, register, analyze, and trade datasets securely with blockchain and AI.
+    </p>
+  </div>
+  <div className="welcome-badge">🔒 Blockchain Secured</div>
+</header>
       <button onClick={connectWallet}>
         {account
           ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}`

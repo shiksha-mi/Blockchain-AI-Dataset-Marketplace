@@ -1,6 +1,37 @@
 
 /* Blockchain AI Dataset Marketplace */
 
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #202944;
+  background: #f5f7fc;
+
+  --primary: #4f46e5;
+  --primary-hover: #3730a3;
+  --surface: #ffffff;
+  --border: #e4e8f1;
+  --text-main: #202944;
+  --text-muted: #68738a;
+  --success: #168653;
+  --danger: #d93450;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f5f7fc;
+}
+
 #root {
   width: 100%;
   min-height: 100vh;
@@ -10,6 +41,7 @@
 .app {
   width: 100%;
   min-height: 100vh;
+  padding: 28px clamp(16px, 4vw, 56px);
   color: var(--text-main);
 }
 
@@ -18,7 +50,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 20px clamp(20px, 5vw, 72px);
+  padding: 20px clamp(16px, 4vw, 56px);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -32,8 +64,37 @@
 .container,
 .dashboard,
 .marketplace-container {
-  width: min(1200px, calc(100% - 40px));
-  margin: 36px auto;
+  width: min(1200px, calc(100% - 32px));
+  margin: 32px auto;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text-main);
+  line-height: 1.3;
+}
+
+.app > h1 {
+  margin: 0 0 22px;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+h2 {
+  margin-bottom: 16px;
+  font-size: 23px;
+}
+
+h3 {
+  margin-bottom: 10px;
+  font-size: 18px;
+}
+
+p {
+  color: var(--text-muted);
+  line-height: 1.65;
 }
 
 .page-title {
@@ -43,8 +104,8 @@
 }
 
 .page-subtitle {
-  color: var(--text-muted);
   margin-bottom: 28px;
+  color: var(--text-muted);
 }
 
 section,
@@ -63,8 +124,22 @@ section,
   margin-bottom: 24px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 5px 20px rgba(27, 39, 70, 0.045);
+  border-radius: 18px;
+  box-shadow: 0 5px 22px rgba(28, 43, 80, 0.045);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.panel:hover,
+.tool-card:hover,
+.dataset-card:hover,
+.card:hover {
+  border-color: #c9caff;
+  box-shadow: 0 12px 30px rgba(49, 46, 129, 0.08);
+}
+
+.panel h2 {
+  font-weight: 750;
 }
 
 .dataset-grid,
@@ -75,39 +150,14 @@ section,
   gap: 20px;
 }
 
-.dataset-card,
-.tool-card,
-.card {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease,
-    transform 0.2s ease;
+.dataset-card h3 {
+  margin-bottom: 14px;
+  font-size: 20px;
 }
 
-.dataset-card:hover,
-.tool-card:hover,
-.card:hover {
-  border-color: #d6d0ff;
-  box-shadow: 0 10px 28px rgba(44, 39, 100, 0.08);
-  transform: translateY(-2px);
-}
-
-h1,
-h2,
-h3 {
-  color: var(--text-main);
-}
-
-h2 {
-  font-size: 23px;
-  margin-bottom: 16px;
-}
-
-h3 {
-  font-size: 18px;
-  margin-bottom: 10px;
-}
-
-p {
-  color: var(--text-muted);
+.dataset-card p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
 }
 
 button,
@@ -117,42 +167,73 @@ button,
   justify-content: center;
   gap: 8px;
   min-height: 42px;
-  padding: 10px 18px;
-  color: #ffffff;
+  padding: 11px 18px;
+  color: #fff;
   background: var(--primary);
   border: 1px solid transparent;
-  border-radius: 9px;
-  font-weight: 600;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 button:hover,
 .btn:hover {
+  color: #fff;
   background: var(--primary-hover);
-  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.18);
+}
+
+button:active,
+.btn:active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 button:focus-visible,
 .btn:focus-visible {
-  outline: 3px solid rgba(91, 75, 219, 0.3);
+  outline: 3px solid rgba(79, 70, 229, 0.3);
   outline-offset: 2px;
+}
+
+.app > button {
+  margin-bottom: 8px;
+}
+
+.panel button,
+.dataset-card button {
+  margin: 6px 8px 6px 0;
+}
+
+.ai-panel button {
+  min-width: 145px;
 }
 
 input,
 textarea,
 select {
   width: 100%;
+  min-height: 44px;
   padding: 11px 13px;
-  background: #ffffff;
+  color: var(--text-main);
+  background: #fbfcff;
   border: 1px solid #dce2ee;
-  border-radius: 9px;
+  border-radius: 10px;
+  font: inherit;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
   border-color: var(--primary);
-  outline: 3px solid rgba(91, 75, 219, 0.1);
+  outline: 3px solid rgba(79, 70, 229, 0.1);
 }
 
 textarea {
@@ -163,13 +244,28 @@ textarea {
 label {
   display: block;
   margin-bottom: 6px;
-  font-weight: 600;
   color: var(--text-main);
+  font-weight: 600;
 }
 
 form {
   display: grid;
   gap: 14px;
+}
+
+.register-panel input:not([type="file"]),
+.ai-panel input {
+  margin: 8px 0;
+}
+
+.register-panel input[type="file"] {
+  display: block;
+  width: 100%;
+  margin: 14px 0;
+  padding: 14px;
+  background: #f8f9ff;
+  border: 1px dashed #b9baf1;
+  border-radius: 12px;
 }
 
 pre,
@@ -181,8 +277,17 @@ pre {
   max-width: 100%;
   padding: 16px;
   overflow-x: auto;
-  background: #f1f3f9;
-  border-radius: 10px;
+  color: #25304a;
+  background: #f3f5fb;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  white-space: pre-wrap;
+}
+
+.panel pre {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
 }
 
 .status,
@@ -192,9 +297,9 @@ pre {
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
+  color: #4338ca;
+  background: #eeedff;
   border-radius: 999px;
-  background: #eeecff;
-  color: #5141bd;
   font-size: 12px;
   font-weight: 700;
 }
@@ -221,11 +326,15 @@ pre {
 }
 
 @media (max-width: 600px) {
+  .app {
+    padding: 20px 14px;
+  }
+
   .app-main,
   .container,
   .dashboard,
   .marketplace-container {
-    width: calc(100% - 28px);
+    width: calc(100% - 20px);
     margin: 22px auto;
   }
 
@@ -244,170 +353,134 @@ pre {
   .dataset-card,
   .card {
     padding: 18px;
+    border-radius: 14px;
   }
 
-  button,
-  .btn {
+  .panel button,
+  .dataset-card button {
     max-width: 100%;
   }
 }
 
-
-/* Main marketplace page */
-.app {
-  width: 100%;
-  min-height: 100vh;
-  padding: 32px clamp(16px, 4vw, 56px);
-  color: var(--text-main);
+/* Dashboard welcome section */
+.dashboard-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+  padding: 28px;
+  background: linear-gradient(135deg, #ffffff, #eef2ff);
+  border: 1px solid #e0e7ff;
+  border-radius: 20px;
 }
 
-/* Marketplace title */
-.app > h1 {
-  margin: 0 0 24px;
-  font-size: clamp(26px, 3vw, 38px);
-  line-height: 1.25;
-  font-weight: 800;
-  letter-spacing: -1px;
-  color: #202448;
-}
-
-/* Wallet connection button */
-.app > button {
-  min-height: 44px;
-  padding: 11px 20px;
-  border-radius: 10px;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(91, 75, 219, 0.15);
-}
-
-
-/* Registration and AI panels */
-.panel {
-  margin: 28px 0;
-  padding: clamp(20px, 3vw, 32px);
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: 0 8px 28px rgba(28, 37, 70, 0.05);
-}
-
-.panel h2 {
-  margin-bottom: 12px;
-  font-size: 23px;
-  font-weight: 750;
-  color: #202448;
-}
-
-.panel > p {
-  margin-bottom: 20px;
-  color: var(--text-muted);
-}
-
-.register-panel input:not([type="file"]),
-.ai-panel input {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  margin: 10px 0;
-  padding: 12px 14px;
-  background: #fbfcff;
-  border: 1px solid #dfe4ef;
-  border-radius: 10px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.register-panel input:focus,
-.ai-panel input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(91, 75, 219, 0.12);
-}
-
-.register-panel input[type="file"] {
-  display: block;
-  width: 100%;
-  margin: 16px 0;
-  padding: 14px;
-  background: #f8f9ff;
-  border: 1px dashed #c8c5ed;
-  border-radius: 10px;
-}
-
-.panel button {
-  margin: 6px 8px 6px 0;
-}
-
-.ai-panel button {
-  min-width: 145px;
-}
-
-.panel pre {
-  max-width: 100%;
-  padding: 18px;
-  overflow-x: auto;
-  color: #25304a;
-  background: #f5f7fc;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 600px) {
-  .panel {
-    padding: 18px;
-    border-radius: 14px;
-  }
-
-  .panel button {
-    width: 100%;
-    margin: 6px 0;
-  }
-}
-
-
-/* Available dataset cards */
-.dataset-card {
-  margin: 18px 0;
-  padding: 24px;
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 5px 20px rgba(27, 39, 70, 0.045);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease,
-    transform 0.2s ease;
-}
-
-.dataset-card:hover {
-  border-color: #d6d0ff;
-  box-shadow: 0 10px 28px rgba(44, 39, 100, 0.08);
-  transform: translateY(-2px);
-}
-
-.dataset-card h3 {
-  margin-bottom: 14px;
-  font-size: 20px;
-  color: #202448;
-}
-
-.dataset-card p {
+.dashboard-welcome h1 {
   margin: 8px 0;
-  overflow-wrap: anywhere;
-  color: var(--text-muted);
+  font-size: clamp(25px, 3vw, 36px);
+  letter-spacing: -0.8px;
 }
 
-.dataset-card button {
-  margin: 12px 8px 0 0;
+.welcome-label {
+  margin: 0;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.welcome-description {
+  max-width: 650px;
+  margin: 8px 0 0;
+}
+
+.welcome-badge {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  color: #166534;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 @media (max-width: 600px) {
-  .dataset-card {
-    padding: 18px;
-  }
-
-  .dataset-card button {
-    width: 100%;
-    margin: 8px 0 0;
+  .dashboard-welcome {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 20px;
   }
 }
 
+
+/* Modern marketplace dataset cards */
+.datasets-panel > h2 {
+  margin-bottom: 8px;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+}
+
+.datasets-panel > p {
+  margin-top: 0;
+}
+
+.datasets-panel > button {
+  margin: 12px 0 20px;
+}
+
+.datasets-panel > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.datasets-panel .dataset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+  border: 1px solid #e2e7f3;
+  border-radius: 16px;
+  overflow-wrap: anywhere;
+}
+
+.datasets-panel .dataset-card h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  color: #252d50;
+}
+
+.datasets-panel .dataset-card p {
+  margin: 5px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.datasets-panel .dataset-card strong {
+  color: #424c67;
+}
+
+.datasets-panel .dataset-card button {
+  align-self: flex-start;
+  margin: 10px 8px 0 0;
+}
+
+.datasets-panel .dataset-card hr {
+  width: 100%;
+  margin-top: 14px;
+  border: 0;
+  border-top: 1px solid #e7eaf3;
+}
+
+@media (max-width: 700px) {
+  .datasets-panel > div {
+    grid-template-columns: 1fr;
+  }
+
+  .datasets-panel .dataset-card button {
+    width: 100%;
+    margin-right: 0;
+  }
+}
