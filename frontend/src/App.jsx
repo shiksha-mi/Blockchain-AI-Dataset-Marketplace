@@ -29,37 +29,44 @@ function App() {
   const [verificationResult, setVerificationResult] = useState(null)
   const [aiError, setAiError] = useState('')
 
-  const runAIRequest = async (endpoint, includeTarget = false) => {
-    if (!selectedFile) {
-      setAiError('Please select a CSV file first.')
-      return null
-    }
-    try {
-      setAiLoading(true)
-      setAiError('')
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      if (includeTarget) formData.append('target_column', aiTarget)
-      const response = await fetch(`${API_URL}/${endpoint}`, {
-        method: 'POST',
-        body: formData
-      })
-      const result = await response.json()
-      if (!response.ok) {
-        throw new Error(
-          result.detail
-            ? JSON.stringify(result.detail)
-            : result.error || `Request failed (${response.status})`
-        )
-      }
-      return result
-    } catch (error) {
-      setAiError(error.message || 'AI request failed.')
-      return null
-    } finally {
-      setAiLoading(false)
-    }
+  
+
+
+const runAIRequest = async (endpoint, includeTarget = false) => {
+  if (!dataset || !dataset.ipfsCID) {
+    setAiError('Please load a registered dataset first.')
+    return null
   }
+
+  try {
+    setAiLoading(true)
+    setAiError('')
+
+    const response = await fetch(
+      `${API_URL}/analyze-ipfs/${dataset.ipfsCID}`
+    )
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        result.detail
+          ? JSON.stringify(result.detail)
+          : result.error || `Request failed (${response.status})`
+      )
+    }
+
+    return result
+  } catch (error) {
+    setAiError(error.message || 'AI request failed.')
+    return null
+  } finally {
+    setAiLoading(false)
+  }
+}
+
+
+
 
   const analyzeDataset = async () => {
     const result = await runAIRequest('analyze')
@@ -254,26 +261,52 @@ function App() {
     }
   }
 
-  const purchaseDataset = async (id, priceInWei) => {
-    console.log("Purchase clicked:", id, priceInWei.toString())
-    try {
-      if (!contract) {
-        setMessage('Please connect MetaMask first.')
-        return
-      }
-      setMessage('Please confirm the purchase in MetaMask...')
+  
+const purchaseDataset = async (id, priceInWei) => {
+  console.log("Purchase clicked:", id, priceInWei.toString())
 
-      const tx = await contract.purchaseDataset(id, { value: priceInWei })
-      console.log("Purchase transaction sent:", tx.hash)
-      
-      await tx.wait()
-      console.log("Purchase transaction confirmed")
-      setMessage('Dataset purchased successfully!')
-    } catch (error) {
-      console.error('Purchase error:', error)
-      setMessage(error.reason || error.shortMessage || 'Purchase failed. Check MetaMask and the dataset price.')
+  try {
+    if (!contract) {
+      setMessage('Please connect MetaMask first.')
+      return
+    }
+
+    setMessage('Please confirm the purchase in MetaMask...')
+
+    const tx = await contract.purchaseDataset(id, {
+      value: priceInWei
+    })
+
+    console.log("Purchase transaction sent:", tx.hash)
+
+    setMessage('Transaction submitted. Waiting for confirmation...')
+
+    const receipt = await tx.wait()
+
+    if (!receipt || receipt.status !== 1) {
+      setMessage('Purchase failed on the blockchain.')
+      return
+    }
+
+    console.log("Purchase transaction confirmed:", tx.hash)
+    setMessage('Dataset purchased successfully!')
+  } catch (error) {
+    console.error('Purchase error:', error)
+
+    if (error.code === 'ACTION_REJECTED') {
+      setMessage('Purchase cancelled in MetaMask.')
+    } else if (error.receipt || error.code === 'CALL_EXCEPTION') {
+      setMessage('Purchase transaction failed on the blockchain.')
+    } else {
+      setMessage(
+        error.shortMessage ||
+        error.reason ||
+        error.message ||
+        'Purchase failed. Check MetaMask and the dataset price.'
+      )
     }
   }
+}
 
   const openIPFS = (cid) => {
     if (!cid) return
