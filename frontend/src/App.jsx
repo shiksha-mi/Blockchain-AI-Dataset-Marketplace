@@ -90,6 +90,11 @@ const runAIRequest = async (endpoint, includeTarget = false) => {
       const provider = new ethers.BrowserProvider(window.ethereum)
       const accounts = await provider.send('eth_requestAccounts', [])
       const signer = await provider.getSigner()
+      const balance = await provider.getBalance(accounts[0])
+      console.log('Connected account:', accounts[0])
+      console.log('Network:', await provider.getNetwork())
+      console.log('Wallet balance:', ethers.formatEther(balance), 'ETH')
+       
       const marketplace = new ethers.Contract(
         CONTRACT_ADDRESS,
         DatasetMarketplace.abi || DatasetMarketplace,
