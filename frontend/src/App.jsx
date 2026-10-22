@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import DatasetMarketplace from './contracts/DatasetMarketplace.json'
 import { CONTRACT_ADDRESS } from './contracts/contractConfig'
@@ -9,6 +9,7 @@ const API_URL = 'http://127.0.0.1:8000'
 function App() {
   const [account, setAccount] = useState('')
   const [contract, setContract] = useState(null)
+  const [activePage, setActivePage] = useState('Overview')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [ipfsCID, setIpfsCID] = useState('')
@@ -21,6 +22,7 @@ function App() {
   const [dataset, setDataset] = useState(null)
   const [datasetId, setDatasetId] = useState('1')
   const [datasets, setDatasets] = useState([])
+  const [purchasedDatasets, setPurchasedDatasets] = useState([])
   const [loadingDatasets, setLoadingDatasets] = useState(false)
   const [aiTarget, setAiTarget] = useState('Marks')
   const [aiLoading, setAiLoading] = useState(false)
@@ -110,6 +112,80 @@ const runAIRequest = async (endpoint, includeTarget = false) => {
       alert(error.shortMessage || error.message || 'Failed to connect wallet')
     }
   }
+  
+const handleAccountsChanged = async (accounts) => {
+  if (!accounts || accounts.length === 0) {
+    setAccount('')
+    setContract(null)
+    setPurchasedDatasets([])
+    setMessage('Please connect your MetaMask wallet.')
+    return
+  }
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+
+    const marketplace = new ethers.Contract(
+      CONTRACT_ADDRESS,
+      DatasetMarketplace.abi || DatasetMarketplace,
+      signer
+    )
+
+    setAccount(accounts[0])
+    setContract(marketplace)
+    setPurchasedDatasets([])
+    setMessage('Wallet account changed successfully.')
+
+    // Load purchases for the newly selected account
+    const filter = marketplace.filters.DatasetPurchased(null, accounts[0])
+    const events = await marketplace.queryFilter(filter, 0, 'latest')
+    const purchasedIds = [
+      ...new Set(events.map(event => event.args.id.toString()))
+    ]
+
+    const loadedPurchases = []
+
+    for (const id of purchasedIds) {
+      const data = await marketplace.getDataset(id)
+
+      loadedPurchases.push({
+        id: data.id.toString(),
+        name: data.name,
+        description: data.description,
+        ipfsCID: data.ipfsCID,
+        dataHash: data.dataHash,
+        price: ethers.formatEther(data.price),
+        seller: data.seller,
+        timestamp: new Date(
+          Number(data.timestamp) * 1000
+        ).toLocaleString(),
+        active: data.active
+      })
+    }
+
+    setPurchasedDatasets(loadedPurchases)
+  } catch (error) {
+    console.error('Account change error:', error)
+    setMessage('Could not load purchases for this wallet.')
+  }
+}
+
+useEffect(() => {
+  if (!window.ethereum) return
+
+  const listener = (accounts) => {
+    handleAccountsChanged(accounts)
+  }
+
+  window.ethereum.on('accountsChanged', listener)
+
+  return () => {
+    window.ethereum.removeListener('accountsChanged', listener)
+  }
+}, [])
+
+
 
   const uploadDatasetToIPFS = async () => {
     if (!selectedFile) {
@@ -147,6 +223,45 @@ const runAIRequest = async (endpoint, includeTarget = false) => {
       setUploading(false)
     }
   }
+  const loadPurchasedDatasets = async () => {
+  if (!contract || !account) {
+    setPurchasedDatasets([])
+    return
+  }
+
+  try {
+    const filter = contract.filters.DatasetPurchased(null, account)
+    const events = await contract.queryFilter(filter, 0, 'latest')
+
+    const purchasedIds = [
+      ...new Set(events.map(event => event.args.id.toString()))
+    ]
+
+    const loadedPurchases = []
+
+    for (const id of purchasedIds) {
+      const data = await contract.getDataset(id)
+
+      loadedPurchases.push({
+        id: data.id.toString(),
+        name: data.name,
+        description: data.description,
+        ipfsCID: data.ipfsCID,
+        dataHash: data.dataHash,
+        price: ethers.formatEther(data.price),
+        seller: data.seller,
+        timestamp: new Date(
+          Number(data.timestamp) * 1000
+        ).toLocaleString(),
+        active: data.active
+      })
+    }
+
+    setPurchasedDatasets(loadedPurchases)
+  } catch (error) {
+    console.error('Load purchased datasets error:', error)
+  }
+}
 
   const registerDataset = async () => {
     if (!contract) {
@@ -223,6 +338,7 @@ const runAIRequest = async (endpoint, includeTarget = false) => {
         })
       }
       setDatasets(loadedDatasets)
+      await loadPurchasedDatasets()
       setMessage(
         loadedDatasets.length === 0
           ? 'No datasets have been registered yet.'
@@ -267,6 +383,7 @@ const runAIRequest = async (endpoint, includeTarget = false) => {
   }
 
   
+
 const purchaseDataset = async (id, priceInWei) => {
   console.log("Purchase clicked:", id, priceInWei.toString())
 
@@ -276,42 +393,51 @@ const purchaseDataset = async (id, priceInWei) => {
       return
     }
 
-    setMessage('Please confirm the purchase in MetaMask...')
-
-    const tx = await contract.purchaseDataset(id, {
-      value: priceInWei
+    // Get the connected wallet address
+    const accounts = await window.ethereum.request({
+      method: 'eth_accounts'
     })
+    const buyerAddress = accounts[0]
 
-    console.log("Purchase transaction sent:", tx.hash)
+    // Get the dataset details from the smart contract
+    const data = await contract.getDataset(id)
+    const sellerAddress = data.seller
 
-    setMessage('Transaction submitted. Waiting for confirmation...')
-
-    const receipt = await tx.wait()
-
-    if (!receipt || receipt.status !== 1) {
-      setMessage('Purchase failed on the blockchain.')
+    // Stop if the buyer is also the seller
+    if (
+      buyerAddress &&
+      buyerAddress.toLowerCase() === sellerAddress.toLowerCase()
+    ) {
+      setMessage('⚠️ You cannot purchase your own dataset. Please connect a different wallet account.')
       return
     }
 
-    console.log("Purchase transaction confirmed:", tx.hash)
-    setMessage('Dataset purchased successfully!')
-  } catch (error) {
-    console.error('Purchase error:', error)
+    setMessage('Please confirm the purchase in MetaMask...')
 
-    if (error.code === 'ACTION_REJECTED') {
-      setMessage('Purchase cancelled in MetaMask.')
-    } else if (error.receipt || error.code === 'CALL_EXCEPTION') {
-      setMessage('Purchase transaction failed on the blockchain.')
-    } else {
-      setMessage(
-        error.shortMessage ||
-        error.reason ||
-        error.message ||
-        'Purchase failed. Check MetaMask and the dataset price.'
-      )
-    }
+    const tx = await contract.purchaseDataset(id, {
+  value: priceInWei
+})
+
+const receipt = await tx.wait()
+
+if (!receipt || receipt.status !== 1) {
+  setMessage('❌ Purchase failed on the blockchain.')
+  return
+}
+
+await loadDatasets()
+
+setMessage('✅ Dataset purchased successfully!')
+  } catch (error) {
+    console.error('Purchase failed:', error)
+    setMessage(
+      error?.reason ||
+      error?.shortMessage ||
+      'Purchase failed. Please try again.'
+    )
   }
 }
+
 
   const openIPFS = (cid) => {
     if (!cid) return
@@ -322,129 +448,621 @@ const purchaseDataset = async (id, priceInWei) => {
     )
   }
 
-  return (
-    <div className="app">
-<header className="dashboard-welcome">
-  <div>
-    <p className="welcome-label">YOUR DATA MARKETPLACE</p>
-    <h1>Blockchain AI Dataset Marketplace</h1>
-    <p className="welcome-description">
-      Discover, register, analyze, and trade datasets securely with blockchain and AI.
-    </p>
-  </div>
-  <div className="welcome-badge">🔒 Blockchain Secured</div>
-</header>
-      <button onClick={connectWallet}>
-        {account
-          ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}`
-          : 'Connect Wallet'}
-      </button>
+  
+return (
+  <div className="app-shell">
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-icon">D</div>
+        <div>
+          <h2>DataVault</h2>
+          <span>AI Marketplace</span>
+        </div>
+      </div>
 
-      {message && <p role="status">{message}</p>}
+      <p className="nav-heading">WORKSPACE</p>
 
-      {account && (
+      <nav className="sidebar-nav">
+        {[
+          { name: 'Overview', icon: '◫' },
+          { name: 'Marketplace', icon: '▦' },
+          { name: 'Register Dataset', icon: '＋' },
+          { name: 'AI Studio', icon: '✳' },
+          { name: 'My Purchases', icon: '⇩' },
+          { name: 'View Dataset', icon: '⌕' },
+        ].map((item) => (
+          <button
+            key={item.name}
+            className={`nav-item ${
+              activePage === item.name ? 'active' : ''
+            }`}
+            onClick={() => setActivePage(item.name)}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            <span>{item.name}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="sidebar-bottom">
+        <div className="network-indicator">
+          <span className="status-dot" />
+          <div>
+            <strong>Blockchain</strong>
+            <span>Marketplace workspace</span>
+          </div>
+        </div>
+        <p>Decentralized data. Intelligent insights.</p>
+      </div>
+    </aside>
+
+    <main className="workspace">
+      <header className="topbar">
+        <div>
+          <p className="breadcrumb">DATAVAULT / WORKSPACE</p>
+          <h1>{activePage}</h1>
+        </div>
+
+        <div className="topbar-actions">
+          <span className={`wallet-status ${account ? 'connected' : ''}`}>
+            <span className="status-dot" />
+            {account ? 'Wallet connected' : 'Wallet not connected'}
+          </span>
+          <button className="wallet-button" onClick={connectWallet}>
+            {account
+              ? `${account.slice(0, 6)}...${account.slice(-4)}`
+              : 'Connect Wallet'}
+          </button>
+        </div>
+      </header>
+
+      {message && (
+        <div className="status-message" role="status">
+          {message}
+        </div>
+      )}
+
+      {!account ? (
+        <section className="welcome-card">
+          <div className="welcome-content">
+            <span className="eyebrow">DECENTRALIZED DATA PLATFORM</span>
+            <h2>Your datasets.<br />Your marketplace.</h2>
+            <p>
+              Register datasets on the blockchain, explore available data,
+              and use AI-powered tools to understand and verify your datasets.
+            </p>
+            <button className="primary-button" onClick={connectWallet}>
+              Connect MetaMask <span>→</span>
+            </button>
+          </div>
+          <div className="welcome-graphic">
+            <div className="graphic-orbit orbit-one" />
+            <div className="graphic-orbit orbit-two" />
+            <div className="graphic-center">D</div>
+            <span className="graphic-node node-one">AI</span>
+            <span className="graphic-node node-two">IPFS</span>
+            <span className="graphic-node node-three">WEB3</span>
+          </div>
+        </section>
+      ) : (
         <>
-          <div className="panel register-panel">
-            <h2>Register Dataset</h2>
-            <p>Select a CSV file to upload it to the backend and Pinata IPFS.</p>
-            <input
-              id="dataset-csv-file"
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-            />
-            <br /><br />
-            <button onClick={uploadDatasetToIPFS} disabled={uploading}>
-              {uploading ? 'Uploading...' : 'Upload CSV to IPFS'}
-            </button>
-            <br /><br />
-            <input type="text" placeholder="Dataset Name" value={name} onChange={(e) => setName(e.target.value)} />
-            <br /><br />
-            <input type="text" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-            <br /><br />
-            <input type="text" placeholder="IPFS CID (filled after upload)" value={ipfsCID} onChange={(e) => setIpfsCID(e.target.value)} />
-            <br /><br />
-            <input type="text" placeholder="Data Hash (filled after upload)" value={dataHash} onChange={(e) => setDataHash(e.target.value)} />
-            <br /><br />
-            <input type="number" min="0" step="any" placeholder="Price in ETH (e.g. 0.01)" value={price} onChange={(e) => setPrice(e.target.value)} />
-            <br /><br />
-            <button onClick={registerDataset} disabled={registering || uploading}>
-              {registering ? 'Registering...' : 'Register Dataset on Blockchain'}
-            </button>
-          </div>
+          {activePage === 'Overview' && (
+            <>
+              <section className="welcome-card overview-welcome">
+                <div className="welcome-content">
+                  <span className="eyebrow">YOUR DATA WORKSPACE</span>
+                  <h2>Welcome to your<br />data marketplace.</h2>
+                  <p>
+                    Manage your datasets, discover new data, and access
+                    AI-powered analysis from one workspace.
+                  </p>
+                  <button
+                    className="primary-button"
+                    onClick={() => setActivePage('Marketplace')}
+                  >
+                    Explore Marketplace <span>→</span>
+                  </button>
+                </div>
+                <div className="welcome-graphic">
+                  <div className="graphic-orbit orbit-one" />
+                  <div className="graphic-orbit orbit-two" />
+                  <div className="graphic-center">D</div>
+                  <span className="graphic-node node-one">AI</span>
+                  <span className="graphic-node node-two">IPFS</span>
+                  <span className="graphic-node node-three">WEB3</span>
+                </div>
+              </section>
 
-          <section className="panel ai-panel">
-            <h2>AI Dataset Tools</h2>
-            <p>Select a CSV file above before running these operations.</p>
-            <label htmlFor="ai-target-column">Target column for ML:</label>
-            <input id="ai-target-column" type="text" value={aiTarget} onChange={(e) => setAiTarget(e.target.value)} placeholder="e.g. Marks" />
-            <br /><br />
-            <button onClick={analyzeDataset} disabled={aiLoading}>Analyze Dataset</button>{' '}
-            <button onClick={validateModel} disabled={aiLoading}>Validate Model</button>{' '}
-            <button onClick={verifyDataset} disabled={aiLoading}>Verify Dataset</button>
-            {aiLoading && <p>Processing dataset...</p>}
-            {aiError && <p role="alert" style={{ color: 'red' }}>{aiError}</p>}
-            {analysisResult && <div><h3>Dataset Analysis Result</h3><pre>{JSON.stringify(analysisResult, null, 2)}</pre></div>}
-            {modelResult && <div><h3>Model Validation Result</h3><pre>{JSON.stringify(modelResult, null, 2)}</pre></div>}
-            {verificationResult && <div><h3>Dataset Verification Result</h3><pre>{JSON.stringify(verificationResult, null, 2)}</pre></div>}
-          </section>
+              <div className="section-heading">
+                <div>
+                  <h2>Workspace overview</h2>
+                  <p>Your marketplace at a glance.</p>
+                </div>
+                <button
+                  className="secondary-button"
+                  onClick={loadDatasets}
+                  disabled={loadingDatasets}
+                >
+                  {loadingDatasets ? 'Refreshing...' : '↻ Refresh data'}
+                </button>
+              </div>
 
-          <div className="panel datasets-panel">
-            <h2>Available Datasets</h2>
-            <button onClick={loadDatasets} disabled={loadingDatasets}>
-              {loadingDatasets ? 'Loading...' : 'View Datasets'}
-            </button>
-            {datasets.length > 0 && (
-              <div>
-                {datasets.map((item) => (
-                  <div className="dataset-card" key={item.id}>
-                    <h3>{item.name}</h3>
-                    <p><strong>ID:</strong> {item.id}</p>
-                    <p><strong>Description:</strong> {item.description}</p>
-                    <p><strong>IPFS CID:</strong> {item.ipfsCID}</p>
-                    <p><strong>Data Hash:</strong> {item.dataHash}</p>
-                    <p><strong>Price:</strong> {item.price} ETH</p>
-                    <p><strong>Seller:</strong> {item.seller}</p>
-                    <p><strong>Registered:</strong> {item.timestamp}</p>
-                    <p><strong>Status:</strong> {item.active ? 'Active' : 'Inactive'}</p>
-                    {item.active && (
-                      <button onClick={() => purchaseDataset(item.id, ethers.parseEther(item.price.toString()))}>
-                        Purchase Dataset
-                      </button>
-                    )}{' '}
-                    <button onClick={() => openIPFS(item.ipfsCID)}>Open Dataset on IPFS</button>
-                    <hr />
+              <section className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon violet">▦</div>
+                  <p>Total datasets loaded</p>
+                  <h3>{datasets.length}</h3>
+                  <span>Registered marketplace listings</span>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon green">✓</div>
+                  <p>Active datasets</p>
+                  <h3>{datasets.filter((item) => item.active).length}</h3>
+                  <span>Available for purchase</span>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon blue">⇩</div>
+                  <p>My purchases</p>
+                  <h3>{purchasedDatasets.length}</h3>
+                  <span>Datasets purchased by this account</span>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon amber">✳</div>
+                  <p>AI tools</p>
+                  <h3>3</h3>
+                  <span>Analysis, validation and verification</span>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="section-heading">
+                  <div>
+                    <h2>Quick actions</h2>
+                    <p>Choose what you'd like to do next.</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+                <div className="quick-actions">
+                  <button
+                    className="action-card"
+                    onClick={() => setActivePage('Register Dataset')}
+                  >
+                    <span className="action-icon violet">＋</span>
+                    <strong>Register a dataset</strong>
+                    <span>Upload CSV and register on-chain →</span>
+                  </button>
+                  <button
+                    className="action-card"
+                    onClick={() => setActivePage('Marketplace')}
+                  >
+                    <span className="action-icon blue">▦</span>
+                    <strong>Explore marketplace</strong>
+                    <span>Browse available datasets →</span>
+                  </button>
+                  <button
+                    className="action-card"
+                    onClick={() => setActivePage('AI Studio')}
+                  >
+                    <span className="action-icon green">✳</span>
+                    <strong>Open AI Studio</strong>
+                    <span>Analyze and verify dataset data →</span>
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
 
-          <div className="panel view-panel">
-            <h2>View Dataset by ID</h2>
-            <input type="number" min="1" placeholder="Dataset ID" value={datasetId} onChange={(e) => setDatasetId(e.target.value)} />
-            <br /><br />
-            <button onClick={viewDataset}>View Dataset</button>
-            {dataset && (
-              <div>
-                <h2>Dataset Details</h2>
-                <p><strong>ID:</strong> {dataset.id}</p>
-                <p><strong>Name:</strong> {dataset.name}</p>
-                <p><strong>Description:</strong> {dataset.description}</p>
-                <p><strong>IPFS CID:</strong> {dataset.ipfsCID}</p>
-                <p><strong>Data Hash:</strong> {dataset.dataHash}</p>
-                <p><strong>Price:</strong> {dataset.price} ETH</p>
-                <p><strong>Seller:</strong> {dataset.seller}</p>
-                <p><strong>Registered:</strong> {dataset.timestamp}</p>
-                <p><strong>Status:</strong> {dataset.active ? 'Active' : 'Inactive'}</p>
-                <button onClick={() => openIPFS(dataset.ipfsCID)}>Open Dataset on IPFS</button>
+          {activePage === 'Register Dataset' && (
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Register a dataset</h2>
+                  <p>Upload your CSV to IPFS and register it on the blockchain.</p>
+                </div>
+                <span className="feature-tag">IPFS + WEB3</span>
               </div>
-            )}
-          </div>
+
+              <div className="form-section">
+                <label htmlFor="dataset-csv-file">Dataset CSV file</label>
+                <input
+                  id="dataset-csv-file"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) =>
+                    setSelectedFile(e.target.files?.[0] || null)
+                  }
+                />
+                {selectedFile && (
+                  <p className="helper-text">
+                    Selected file: {selectedFile.name}
+                  </p>
+                )}
+                <button
+                  className="secondary-button"
+                  onClick={uploadDatasetToIPFS}
+                  disabled={uploading}
+                >
+                  {uploading ? 'Uploading...' : '↑ Upload CSV to IPFS'}
+                </button>
+              </div>
+
+              <div className="form-grid">
+                <div>
+                  <label htmlFor="dataset-name">Dataset name</label>
+                  <input
+                    id="dataset-name"
+                    placeholder="e.g. Student Performance Data"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="dataset-price">Price (ETH)</label>
+                  <input
+                    id="dataset-price"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="e.g. 0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                </div>
+                <div className="full-width">
+                  <label htmlFor="dataset-description">Description</label>
+                  <textarea
+                    id="dataset-description"
+                    placeholder="Describe the dataset and its contents..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <div className="full-width">
+                  <label htmlFor="dataset-cid">IPFS content identifier (CID)</label>
+                  <input
+                    id="dataset-cid"
+                    placeholder="Filled after upload"
+                    value={ipfsCID}
+                    onChange={(e) => setIpfsCID(e.target.value)}
+                  />
+                </div>
+                <div className="full-width">
+                  <label htmlFor="dataset-hash">Dataset hash</label>
+                  <input
+                    id="dataset-hash"
+                    placeholder="Filled after upload"
+                    value={dataHash}
+                    onChange={(e) => setDataHash(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-footer">
+                <p>Your dataset metadata will be registered on the connected blockchain.</p>
+                <button
+                  className="primary-button"
+                  onClick={registerDataset}
+                  disabled={registering || uploading}
+                >
+                  {registering ? 'Registering...' : 'Register on Blockchain →'}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {activePage === 'Marketplace' && (
+            <>
+              <section className="marketplace-banner">
+                <div>
+                  <span className="eyebrow">DISCOVER DATA</span>
+                  <h2>Explore the marketplace</h2>
+                  <p>Discover datasets registered on the blockchain.</p>
+                </div>
+                <button
+                  className="primary-button"
+                  onClick={loadDatasets}
+                  disabled={loadingDatasets}
+                >
+                  {loadingDatasets ? 'Loading...' : '↻ Load datasets'}
+                </button>
+              </section>
+
+              <section className="panel">
+                <div className="section-heading">
+                  <div>
+                    <h2>Available datasets</h2>
+                    <p>{datasets.length} listing(s) currently loaded.</p>
+                  </div>
+                </div>
+
+                {datasets.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">▦</div>
+                    <h3>No datasets loaded yet</h3>
+                    <p>Connect to the blockchain and load the registered datasets.</p>
+                    <button
+                      className="secondary-button"
+                      onClick={loadDatasets}
+                      disabled={loadingDatasets}
+                    >
+                      {loadingDatasets ? 'Loading...' : 'Load datasets'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="dataset-grid">
+                    {datasets.map((item) => (
+                      <article className="dataset-card" key={item.id}>
+                        <div className="dataset-card-top">
+                          <span className="dataset-symbol">▤</span>
+                          <span className={`feature-tag ${item.active ? 'tag-active' : ''}`}>
+                            {item.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <p className="dataset-id">DATASET #{item.id}</p>
+                        <h3>{item.name}</h3>
+                        <p>{item.description}</p>
+                        <div className="dataset-price">
+                          <span>Listed price</span>
+                          <strong>{item.price} ETH</strong>
+                        </div>
+                        <div className="dataset-meta">
+                          <span>Seller</span>
+                          <span>{item.seller.slice(0, 6)}...{item.seller.slice(-4)}</span>
+                        </div>
+                        <div className="dataset-card-actions">
+                          {item.active && (
+                            <button
+                              className="primary-button"
+                              onClick={() =>
+                                purchaseDataset(
+                                  item.id,
+                                  ethers.parseEther(item.price.toString())
+                                )
+                              }
+                            >
+                              Purchase dataset
+                            </button>
+                          )}
+                          <button
+                            className="secondary-button"
+                            onClick={() => openIPFS(item.ipfsCID)}
+                          >
+                            View on IPFS ↗
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          {activePage === 'AI Studio' && (
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <h2>AI Studio</h2>
+                  <p>Analyze and validate your registered dataset using the AI backend.</p>
+                </div>
+                <span className="feature-tag">AI TOOLS</span>
+              </div>
+
+              <div className="form-section">
+                <label htmlFor="ai-dataset-id">Registered dataset ID</label>
+                <div className="inline-form">
+                  <input
+                    id="ai-dataset-id"
+                    type="number"
+                    min="1"
+                    placeholder="Dataset ID"
+                    value={datasetId}
+                    onChange={(e) => setDatasetId(e.target.value)}
+                  />
+                  <button
+                    className="secondary-button"
+                    onClick={viewDataset}
+                  >
+                    Load dataset
+                  </button>
+                </div>
+                {dataset && (
+                  <div className="loaded-dataset">
+                    <strong>{dataset.name}</strong>
+                    <p>{dataset.description}</p>
+                    <span className="helper-text">IPFS CID: {dataset.ipfsCID}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="form-section">
+                <label htmlFor="ai-target-column">Target column for model validation</label>
+                <input
+                  id="ai-target-column"
+                  value={aiTarget}
+                  onChange={(e) => setAiTarget(e.target.value)}
+                  placeholder="e.g. Marks"
+                />
+                <p className="helper-text">
+                  Enter the target column appropriate for your dataset.
+                </p>
+              </div>
+
+              {aiError && <div className="error-box" role="alert">{aiError}</div>}
+
+              <div className="ai-actions">
+                <button
+                  className="action-card"
+                  onClick={analyzeDataset}
+                  disabled={aiLoading}
+                >
+                  <span className="action-icon violet">◫</span>
+                  <strong>Analyze dataset</strong>
+                  <span>Review dataset statistics and structure.</span>
+                  <span className="action-link">
+                    {aiLoading ? 'Processing...' : 'Run analysis →'}
+                  </span>
+                </button>
+                <button
+                  className="action-card"
+                  onClick={validateModel}
+                  disabled={aiLoading}
+                >
+                  <span className="action-icon blue">⌁</span>
+                  <strong>Validate model</strong>
+                  <span>Run model validation through your backend.</span>
+                  <span className="action-link">
+                    {aiLoading ? 'Processing...' : 'Validate model →'}
+                  </span>
+                </button>
+                <button
+                  className="action-card"
+                  onClick={verifyDataset}
+                  disabled={aiLoading}
+                >
+                  <span className="action-icon green">✓</span>
+                  <strong>Verify dataset</strong>
+                  <span>Check the dataset using your verification service.</span>
+                  <span className="action-link">
+                    {aiLoading ? 'Processing...' : 'Verify dataset →'}
+                  </span>
+                </button>
+              </div>
+
+              {aiLoading && <p className="helper-text">Processing your request...</p>}
+
+              {[
+                { title: 'Dataset analysis result', value: analysisResult },
+                { title: 'Model validation result', value: modelResult },
+                { title: 'Dataset verification result', value: verificationResult },
+              ].map((result) =>
+                result.value ? (
+                  <div className="result-panel" key={result.title}>
+                    <h3>{result.title}</h3>
+                    <pre>{JSON.stringify(result.value, null, 2)}</pre>
+                  </div>
+                ) : null
+              )}
+            </section>
+          )}
+
+          {activePage === 'My Purchases' && (
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <h2>My purchases</h2>
+                  <p>Datasets purchased by the connected wallet account.</p>
+                </div>
+                <span className="feature-tag">
+                  {purchasedDatasets.length} PURCHASED
+                </span>
+              </div>
+
+              {purchasedDatasets.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">⇩</div>
+                  <h3>No purchases found</h3>
+                  <p>Load the marketplace listings and purchase a dataset to see it here.</p>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      setActivePage('Marketplace')
+                      loadDatasets()
+                    }}
+                  >
+                    Explore marketplace →
+                  </button>
+                </div>
+              ) : (
+                <div className="dataset-grid">
+                  {purchasedDatasets.map((item) => (
+                    <article className="dataset-card" key={item.id}>
+                      <div className="dataset-card-top">
+                        <span className="dataset-symbol">▤</span>
+                        <span className="feature-tag tag-active">Purchased</span>
+                      </div>
+                      <p className="dataset-id">DATASET #{item.id}</p>
+                      <h3>{item.name}</h3>
+                      <p>{item.description}</p>
+                      <div className="dataset-price">
+                        <span>Purchase price</span>
+                        <strong>{item.price} ETH</strong>
+                      </div>
+                      <button
+                        className="primary-button"
+                        onClick={() => openIPFS(item.ipfsCID)}
+                      >
+                        Open dataset on IPFS ↗
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activePage === 'View Dataset' && (
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <h2>View dataset details</h2>
+                  <p>Retrieve dataset metadata from the smart contract.</p>
+                </div>
+              </div>
+              <div className="inline-form">
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Enter dataset ID"
+                  value={datasetId}
+                  onChange={(e) => setDatasetId(e.target.value)}
+                />
+                <button className="primary-button" onClick={viewDataset}>
+                  View dataset
+                </button>
+              </div>
+              {dataset && (
+                <div className="details-grid">
+                  {[
+                    ['Dataset ID', dataset.id],
+                    ['Name', dataset.name],
+                    ['Description', dataset.description],
+                    ['IPFS CID', dataset.ipfsCID],
+                    ['Data hash', dataset.dataHash],
+                    ['Price', `${dataset.price} ETH`],
+                    ['Seller', dataset.seller],
+                    ['Registered', dataset.timestamp],
+                    ['Status', dataset.active ? 'Active' : 'Inactive'],
+                  ].map(([label, value]) => (
+                    <div className="detail-item" key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                  <button
+                    className="secondary-button"
+                    onClick={() => openIPFS(dataset.ipfsCID)}
+                  >
+                    Open dataset on IPFS ↗
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
-    </div>
-  )
+
+      <footer className="workspace-footer">
+        <span>DataVault · Blockchain AI Dataset Marketplace</span>
+        <span>Decentralized data management</span>
+      </footer>
+    </main>
+  </div>
+)
+
 }
+
+
+
 
 export default App
