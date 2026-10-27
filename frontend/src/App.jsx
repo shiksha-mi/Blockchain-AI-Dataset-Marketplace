@@ -292,8 +292,14 @@ useEffect(() => {
         priceInWei
       )
       setMessage('Transaction submitted. Waiting for confirmation...')
-      await tx.wait()
-      setMessage('Dataset registered successfully on the blockchain!')
+
+const receipt = await tx.wait()
+
+if (!receipt || receipt.status !== 1) {
+  throw new Error('The blockchain transaction failed. The dataset was not registered.')
+}
+
+setMessage('Dataset registered successfully on the blockchain!')
       alert('Dataset registered successfully!')
       setName('')
       setDescription('')
@@ -384,6 +390,7 @@ useEffect(() => {
 
   
 
+
 const purchaseDataset = async (id, priceInWei) => {
   console.log("Purchase clicked:", id, priceInWei.toString())
 
@@ -393,21 +400,26 @@ const purchaseDataset = async (id, priceInWei) => {
       return
     }
 
-    // Get the connected wallet address
     const accounts = await window.ethereum.request({
       method: 'eth_accounts'
     })
+
     const buyerAddress = accounts[0]
 
-    // Get the dataset details from the smart contract
+    const signer = await contract.runner.getAddress()
+console.log("MetaMask account:", buyerAddress)
+console.log("Contract signer account:", signer)
+console.log("Purchase dataset ID:", id)
+
+    if (!buyerAddress) {
+      setMessage('Please connect your MetaMask wallet.')
+      return
+    }
+
     const data = await contract.getDataset(id)
     const sellerAddress = data.seller
 
-    // Stop if the buyer is also the seller
-    if (
-      buyerAddress &&
-      buyerAddress.toLowerCase() === sellerAddress.toLowerCase()
-    ) {
+    if (buyerAddress.toLowerCase() === sellerAddress.toLowerCase()) {
       setMessage('⚠️ You cannot purchase your own dataset. Please connect a different wallet account.')
       return
     }
@@ -415,27 +427,42 @@ const purchaseDataset = async (id, priceInWei) => {
     setMessage('Please confirm the purchase in MetaMask...')
 
     const tx = await contract.purchaseDataset(id, {
-  value: priceInWei
-})
+      value: priceInWei
+    })
 
-const receipt = await tx.wait()
+    setMessage('Transaction submitted. Waiting for confirmation...')
 
-if (!receipt || receipt.status !== 1) {
-  setMessage('❌ Purchase failed on the blockchain.')
-  return
-}
+    const receipt = await tx.wait()
 
-await loadDatasets()
+    if (!receipt || Number(receipt.status) !== 1) {
+      throw new Error('The blockchain transaction failed.')
+    }
 
-setMessage('✅ Dataset purchased successfully!')
+    setMessage('✅ Dataset purchased successfully!')
+
+    // Refresh the dataset list separately so a refresh error
+    // does not make a successful purchase appear to have failed.
+    try {
+      await loadDatasets()
+    } catch (refreshError) {
+      console.error('Dataset refresh failed:', refreshError)
+    }
+
   } catch (error) {
-    console.error('Purchase failed:', error)
-    setMessage(
+  console.error('Purchase failed:', error)
+  console.error('Error reason:', error?.reason)
+  console.error('Error message:', error?.shortMessage || error?.message)
+  console.error('Transaction hash:', error?.transaction?.hash)
+
+  setMessage(
+    `❌ Purchase failed: ${
       error?.reason ||
       error?.shortMessage ||
+      error?.message ||
       'Purchase failed. Please try again.'
-    )
-  }
+    }`
+  )
+}
 }
 
 
@@ -455,7 +482,7 @@ return (
       <div className="brand">
         <div className="brand-icon">D</div>
         <div>
-          <h2>DataVault</h2>
+          <h2>DataSet</h2>
           <span>AI Marketplace</span>
         </div>
       </div>
